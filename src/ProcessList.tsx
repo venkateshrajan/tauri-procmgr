@@ -72,6 +72,15 @@ export default function ProcessList() {
     p.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase())
   );
 
+  const killProcess = async (pid: number) => {
+    try {
+      await invoke("kill_process", { pid });
+      fetchProcesses();
+    } catch (error) {
+      console.error(`Failed to kill process ${pid}:`, error);
+    }
+  };
+
   useEffect(() => {
     fetchProcesses();
     const interval = setInterval(fetchProcesses, 3000);
@@ -105,11 +114,13 @@ export default function ProcessList() {
         <table className="w-full text-left border-collapse">
           <thead className="bg-gray-200 sticky top-0 z-10">
             <tr>
-              {["pid", "name", "cpu", "mem"].map((key) => (
+              {["pid", "name", "cpu", "mem", "actions"].map((key) => (
                 <th
                   key={key}
                   className="p-2 cursor-pointer hover:bg-gray-300"
-                  onClick={() => handleSort(key as keyof Process)}
+                  onClick={() =>
+                    key !== "actions" && handleSort(key as keyof Process)
+                  }
                 >
                   {key.toUpperCase()}{" "}
                   {sortKey === key ? (sortOrder === "asc" ? "↑" : "↓") : ""}
@@ -125,11 +136,19 @@ export default function ProcessList() {
                   <td className="p-2">{process.name}</td>
                   <td className="p-2">{process.cpu}</td>
                   <td className="p-2">{process.mem}</td>
+                  <td className="p-2">
+                    <button
+                      onClick={() => killProcess(process.pid)}
+                      className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-500"
+                    >
+                      Kill
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={4} className="text-center p-4">
+                <td colSpan={5} className="text-center p-4">
                   No Processes found
                 </td>
               </tr>
