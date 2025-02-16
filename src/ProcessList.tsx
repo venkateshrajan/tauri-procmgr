@@ -84,7 +84,7 @@ export default function ProcessList() {
 
   useEffect(() => {
     fetchProcesses();
-    const interval = setInterval(fetchProcesses, 3000);
+    const interval = setInterval(fetchProcesses, 500);
 
     window.addEventListener("resize", updateTableHeight);
     updateTableHeight();
