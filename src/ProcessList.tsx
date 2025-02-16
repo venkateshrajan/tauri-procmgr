@@ -6,6 +6,7 @@ type Process = {
   name: string;
   cpu: number;
   mem: number;
+  status: string;
 };
 
 export default function ProcessList() {
@@ -94,6 +95,26 @@ export default function ProcessList() {
     };
   }, []);
 
+  const getTitle = (title: string) => {
+    switch (title) {
+      case "pid":
+        return "Process ID";
+      case "name":
+        return "Name";
+      case "cpu":
+        const totalCPU = filteredProcesses.reduce((n, p) => n + p.cpu, 0);
+        return `CPU Usage (${totalCPU.toFixed(1)}%)`;
+      case "mem":
+        let totalMem = filteredProcesses.reduce((n, p) => n + p.mem, 0);
+        totalMem = totalMem / (1024 * 1024 * 1024);
+        return `Memory (${totalMem.toFixed(2)} GB)`;
+      case "status":
+        return "Status";
+      case "actions":
+        return "Actions";
+    }
+  };
+
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">Process Manager</h1>
@@ -114,15 +135,15 @@ export default function ProcessList() {
         <table className="w-full text-left border-collapse">
           <thead className="bg-gray-200 sticky top-0 z-10">
             <tr>
-              {["pid", "name", "cpu", "mem", "actions"].map((key) => (
+              {["pid", "name", "cpu", "mem", "status", "actions"].map((key) => (
                 <th
                   key={key}
-                  className="p-2 cursor-pointer hover:bg-gray-300"
+                  className="p-2 cursor-pointer hover:bg-gray-300 text-center"
                   onClick={() =>
                     key !== "actions" && handleSort(key as keyof Process)
                   }
                 >
-                  {key.toUpperCase()}{" "}
+                  {getTitle(key)}{" "}
                   {sortKey === key ? (sortOrder === "asc" ? "↑" : "↓") : ""}
                 </th>
               ))}
@@ -131,11 +152,17 @@ export default function ProcessList() {
           <tbody>
             {filteredProcesses.length > 0 ? (
               filteredProcesses.map((process) => (
-                <tr key={process.pid} className="border-b hover:b-gray-100">
+                <tr
+                  key={process.pid}
+                  className="border-b hover:b-gray-100 text-center"
+                >
                   <td className="p-2">{process.pid}</td>
                   <td className="p-2">{process.name}</td>
-                  <td className="p-2">{process.cpu}</td>
-                  <td className="p-2">{process.mem}</td>
+                  <td className="p-2">{process.cpu.toFixed(1)}%</td>
+                  <td className="p-2">
+                    {(process.mem / (1024 * 1024)).toFixed(2)} MB
+                  </td>
+                  <td className="p-2">{process.status}</td>
                   <td className="p-2">
                     <button
                       onClick={() => killProcess(process.pid)}
@@ -148,7 +175,7 @@ export default function ProcessList() {
               ))
             ) : (
               <tr>
-                <td colSpan={5} className="text-center p-4">
+                <td colSpan={6} className="text-center p-4">
                   No Processes found
                 </td>
               </tr>

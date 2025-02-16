@@ -1,5 +1,7 @@
 use log::{error, info};
-use sysinfo::{CpuRefreshKind, Pid, ProcessRefreshKind, RefreshKind, System};
+use sysinfo::{
+    CpuRefreshKind, MemoryRefreshKind, Pid, ProcessRefreshKind, ProcessStatus, RefreshKind, System,
+};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Process {
@@ -7,6 +9,7 @@ pub struct Process {
     name: String,
     cpu: f32,
     mem: u64,
+    status: String,
 }
 
 #[tauri::command]
@@ -14,12 +17,14 @@ fn get_processes() -> Vec<Process> {
     let mut system = System::new_with_specifics(
         RefreshKind::nothing()
             .with_cpu(CpuRefreshKind::everything())
+            .with_memory(MemoryRefreshKind::everything())
             .with_processes(ProcessRefreshKind::nothing().with_cpu().with_memory()),
     );
     std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
     system.refresh_specifics(
         RefreshKind::nothing()
             .with_cpu(CpuRefreshKind::everything())
+            .with_memory(MemoryRefreshKind::everything())
             .with_processes(ProcessRefreshKind::nothing().with_cpu().with_memory()),
     );
 
@@ -34,6 +39,7 @@ fn get_processes() -> Vec<Process> {
             name: process.name().to_string_lossy().to_string(),
             cpu: process.cpu_usage() / cpu_count,
             mem: process.memory(),
+            status: process.status().to_string(),
         })
         .collect()
 }
