@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Process = {
     pid: number;
@@ -12,18 +12,47 @@ export default function ProcessList() {
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [filter, setFilter] = useState<string>("");
-    const [tableHeight, setTableHeight] = useState<number>(400)
+    const [tableHeight, setTableHeight] = useState<number>(400);
+    const [sortKey, setSortKey] = useState<keyof Process>('name' as keyof Process);
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollPosition = useRef<number>(0);
 
     // Fetch process list form the tauri backend
     const fetchProcesses = async() => {
         setLoading(true);
         try {
-            setProcesses(await invoke<Process[]>("get_processes"));
-        } catch (error) {
-            console.error("Error fetching processes:", error);
-        }
-        setLoading(false);
+            scrollPosition.current = scrollRef.current?.scrollTop || 0;
+            const result = await invoke<Process[]>("get_processes");
+            setProcesses(result);
+            setTimeout(() => {
+                if (scrollRef.current) {
+                    scrollRef.current.scrollTop = scrollPosition.current;
+                }
+            }, 0);
+        } finally {
+            setLoading(false);
+        } 
     }
+
+    const updateTableHeight = () => {
+        const height = window.innerHeight - 200;
+        setTableHeight(height > 200 ? height : 200);
+    }
+
+    const handleSort = (key: keyof Process) => {
+        setSortOrder(sortKey == key && sortOrder === 'asc' ? 'desc' : 'asc');
+        setSortKey(key);
+    }
+
+    const sortedProcesses = [...processes].sort((a,b) => {
+        if(!sortKey) return 0;
+        const aValue = a[sortKey];
+        const bValue = b[sortKey];
+        return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1: -1);
+    })
+
+    const filteredProcesses = sortedProcesses.filter((p) => p.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
 
     useEffect(() => {
         fetchProcesses();
@@ -37,13 +66,6 @@ export default function ProcessList() {
             window.removeEventListener("resize", updateTableHeight);
         }
     }, []);
-
-    const filteredProcesses = processes.filter((p) => p.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
-
-    const updateTableHeight = () => {
-        const height = window.innerHeight - 200;
-        setTableHeight(height > 200 ? height : 200);
-    }
 
     return (
         <div className="p-4">
@@ -60,14 +82,19 @@ export default function ProcessList() {
             {loading? (
                 <p className="text-center">Loading...</p>
             ): (
-                <div className="overflow-auto border border-grey-300 rounded" style={{ height: `${tableHeight}px`}}>
+                <div ref={scrollRef} className="overflow-auto border border-grey-300 rounded" style={{ height: `${tableHeight}px`}}>
                     <table className="w-full text-left border-collapse">
-                        <thead className="bg-gray-200">
+                        <thead className="bg-gray-200 sticky top-0 z-10">
                             <tr>
-                                <th className="p-2">PID</th>
-                                <th className="p-2">Name</th>
-                                <th className="p-2">CPU (%)</th>
-                                <th className="p-2">Memory (KB)</th>
+                                {['pid', 'name', 'cpu', 'mem'].map((key) => (
+                                    <th
+                                        key={key}
+                                        className="p-2 cursor-pointer hover:bg-gray-300"
+                                        onClick={() => handleSort(key as keyof Process)}
+                                    >
+                                        {key.toUpperCase()} {sortKey === key ? (sortOrder === 'asc' ? '↑' : '↓'): ''}
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>

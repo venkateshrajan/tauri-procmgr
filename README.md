@@ -1,6 +1,6 @@
-# Tauri + React + Typescript
+# ProcMgr
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Simple process manager using tauri
 
 ## Recommended IDE Setup
 
