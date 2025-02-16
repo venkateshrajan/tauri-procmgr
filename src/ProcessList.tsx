@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 
 type Process = {
@@ -18,31 +19,28 @@ export default function ProcessList() {
   );
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollPosition = useRef<number>(0);
+  const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
+  const [loading, setLoading] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 50;
 
   // Fetch process list form the tauri backend
   const fetchProcesses = async () => {
+    if (loading) return;
     try {
-      scrollPosition.current = scrollRef.current?.scrollTop || 0;
+      setLoading(true);
       const result = await invoke<Process[]>("get_processes");
-      setProcesses((prevProcesses) =>
-        JSON.stringify(prevProcesses) !== JSON.stringify(result)
-          ? result
-          : prevProcesses
-      );
-      requestAnimationFrame(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollPosition.current;
-        }
-      });
+      setProcesses(result);
+      setLastUpdated(Date.now());
     } catch (error) {
       console.error("Failed to fetch processes:", error);
     }
+    setLoading(false);
   };
 
   const updateTableHeight = () => {
-    const height = window.innerHeight - 200;
-    setTableHeight(height > 200 ? height : 200);
+    const height = window.innerHeight - 250;
+    setTableHeight(height > 200 ? height : 250);
   };
 
   const handleSort = (key: keyof Process) => {
@@ -73,6 +71,11 @@ export default function ProcessList() {
     p.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase())
   );
 
+  const paginatedpProcesses = filteredProcesses.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   const killProcess = async (pid: number) => {
     try {
       await invoke("kill_process", { pid });
@@ -83,20 +86,25 @@ export default function ProcessList() {
   };
 
   useEffect(() => {
-    fetchProcesses();
-    const interval = setInterval(fetchProcesses, 500);
+    const unlisten = listen<Process[]>("process_list_update", (event) => {
+      setProcesses(event.payload);
+    });
+
+    invoke("start_process_listener");
 
     window.addEventListener("resize", updateTableHeight);
     updateTableHeight();
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener("resize", updateTableHeight);
+      unlisten.then((unsub) => unsub());
     };
   }, []);
 
   const getTitle = (title: string) => {
     switch (title) {
+      case "sno":
+        return "S.No";
       case "pid":
         return "Process ID";
       case "name":
@@ -118,7 +126,6 @@ export default function ProcessList() {
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">Process Manager</h1>
-
       <input
         type="text"
         placeholder="Filter by process name..."
@@ -126,7 +133,7 @@ export default function ProcessList() {
         onChange={(e) => setFilter(e.target.value)}
         className="w-full p-2 border border-gray-300 rounded mb-4"
       />
-
+      {loading && <div className="text-center mb-2">Loading...</div>}
       <div
         ref={scrollRef}
         className="overflow-auto border border-grey-300 rounded"
@@ -135,27 +142,27 @@ export default function ProcessList() {
         <table className="w-full text-left border-collapse">
           <thead className="bg-gray-200 sticky top-0 z-10">
             <tr>
-              {["pid", "name", "cpu", "mem", "status", "actions"].map((key) => (
-                <th
-                  key={key}
-                  className="p-2 cursor-pointer hover:bg-gray-300 text-center"
-                  onClick={() =>
-                    key !== "actions" && handleSort(key as keyof Process)
-                  }
-                >
-                  {getTitle(key)}{" "}
-                  {sortKey === key ? (sortOrder === "asc" ? "↑" : "↓") : ""}
-                </th>
-              ))}
+              {["sno", "pid", "name", "cpu", "mem", "status", "actions"].map(
+                (key) => (
+                  <th
+                    key={key}
+                    className="p-2 cursor-pointer hover:bg-gray-300 text-center"
+                    onClick={() =>
+                      key !== "actions" && handleSort(key as keyof Process)
+                    }
+                  >
+                    {getTitle(key)}{" "}
+                    {sortKey === key ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
           <tbody>
-            {filteredProcesses.length > 0 ? (
-              filteredProcesses.map((process) => (
-                <tr
-                  key={process.pid}
-                  className="border-b hover:b-gray-100 text-center"
-                >
+            {paginatedpProcesses.length > 0 ? (
+              paginatedpProcesses.map((process, i) => (
+                <tr key={i} className="border-b hover:b-gray-100 text-center">
+                  <td className="p-2">{i}</td>
                   <td className="p-2">{process.pid}</td>
                   <td className="p-2">{process.name}</td>
                   <td className="p-2">{process.cpu.toFixed(1)}%</td>
@@ -175,13 +182,32 @@ export default function ProcessList() {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="text-center p-4">
+                <td colSpan={7} className="text-center p-4">
                   No Processes found
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+      <div className="flex justify-between items-center mt-4">
+        <button
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+          className="px-4 py-2 bg-secondary text-secondary-foreground rounded disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span>
+          Page {currentPage} of {(processes.length / itemsPerPage).toFixed(0)}
+        </span>
+        <button
+          disabled={currentPage * itemsPerPage >= filteredProcesses.length}
+          onClick={() => setCurrentPage(currentPage + 1)}
+          className="px-4 py-2 bg-secondary text-secondary-foreground rounded disabled:opacity-50"
+        >
+          Next
+        </button>
       </div>
     </div>
   );

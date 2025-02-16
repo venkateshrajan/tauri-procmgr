@@ -1,7 +1,6 @@
 use log::{error, info};
-use sysinfo::{
-    CpuRefreshKind, MemoryRefreshKind, Pid, ProcessRefreshKind, ProcessStatus, RefreshKind, System,
-};
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, Pid, ProcessRefreshKind, RefreshKind, System};
+use tauri::{AppHandle, Emitter};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Process {
@@ -28,6 +27,8 @@ fn get_processes() -> Vec<Process> {
             .with_processes(ProcessRefreshKind::nothing().with_cpu().with_memory()),
     );
 
+    // std::thread::sleep(std::time::Duration::from_millis(10000));
+
     let cpu_count = system
         .physical_core_count()
         .expect("Couldn't get the physical core count") as f32;
@@ -42,6 +43,15 @@ fn get_processes() -> Vec<Process> {
             status: process.status().to_string(),
         })
         .collect()
+}
+
+#[tauri::command]
+fn start_process_listener(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        let processes = get_processes();
+        app.emit("process_list_update", processes).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    });
 }
 
 #[tauri::command]
@@ -71,7 +81,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![get_processes, kill_process])
+        .invoke_handler(tauri::generate_handler![
+            get_processes,
+            kill_process,
+            start_process_listener
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
